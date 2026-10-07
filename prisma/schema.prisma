@@ -1,0 +1,186 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// Enums
+// ==========================================
+
+enum VehicleCondition {
+  new
+  used
+  certified
+
+  @@map("vehicle_condition")
+}
+
+enum VehicleStatus {
+  available
+  sold
+  reserved
+  pending
+
+  @@map("vehicle_status")
+}
+
+enum FuelType {
+  gasoline
+  diesel
+  electric
+  hybrid
+  plug_in_hybrid
+  hydrogen
+
+  @@map("fuel_type")
+}
+
+enum Transmission {
+  automatic
+  manual
+  dual_clutch
+  cvt
+  direct_drive
+
+  @@map("transmission")
+}
+
+enum Drivetrain {
+  awd
+  fwd
+  rwd
+  four_wd @map("4wd")
+
+  @@map("drivetrain")
+}
+
+enum UserRole {
+  admin
+  sales
+  viewer
+
+  @@map("user_role")
+}
+
+enum LeadType {
+  test_drive
+  general_inquiry
+  purchase_offer
+  financing
+
+  @@map("lead_type")
+}
+
+enum LeadStatus {
+  new
+  contacted
+  appointment_scheduled
+  completed
+  cancelled
+
+  @@map("lead_status")
+}
+
+// ==========================================
+// Vehicle Model
+// ==========================================
+
+model Vehicle {
+  id                 String           @id @default(uuid()) @db.Uuid
+  vin                String           @unique @db.VarChar(17)
+  make               String           @db.VarChar(64)
+  model              String           @db.VarChar(64)
+  year               Int              @db.Integer
+  trim               String?          @db.VarChar(64)
+  mileage            Int              @db.Integer
+  price              Decimal          @db.Decimal(12, 2)
+  currency           String           @default("USD") @db.VarChar(3)
+  fuelType           FuelType         @map("fuel_type")
+  transmission       Transmission     @map("transmission")
+  drivetrain         Drivetrain       @map("drivetrain")
+  exteriorColor      String           @map("exterior_color") @db.VarChar(64)
+  interiorColor      String           @map("interior_color") @db.VarChar(64)
+  condition          VehicleCondition @map("condition")
+  status             VehicleStatus    @default(available) @map("status")
+  features           String[]         @map("features")
+  imageUrls          String[]         @map("image_urls")
+  primaryImageIndex  Int              @default(0) @map("primary_image_index") @db.Integer
+  specs              Json             @map("specs") // JSONB for engine hp, torque, mpg
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  leads              Lead[]
+
+  @@index([make, model])
+  @@index([status])
+  @@index([price])
+  @@index([year])
+  @@index([mileage])
+  @@map("vehicles")
+}
+
+// ==========================================
+// User Model (Role-Based Access Control)
+// ==========================================
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(128)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         UserRole  @default(viewer) @map("role")
+  isActive     Boolean   @default(true) @map("is_active")
+  avatarUrl    String?   @map("avatar_url") @db.Text
+  phoneNumber  String?   @map("phone_number") @db.VarChar(32)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  assignedLeads Lead[]   @relation("UserAssignedLeads")
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ==========================================
+// Lead Model (Test Drive & Inquiries)
+// ==========================================
+
+model Lead {
+  id                     String      @id @default(uuid()) @db.Uuid
+  vehicleId              String?     @map("vehicle_id") @db.Uuid
+  assignedToUserId       String?     @map("assigned_to_user_id") @db.Uuid
+  firstName              String      @map("first_name") @db.VarChar(64)
+  lastName               String      @map("last_name") @db.VarChar(64)
+  email                  String      @db.VarChar(255)
+  phone                  String      @db.VarChar(32)
+  leadType               LeadType    @default(test_drive) @map("lead_type")
+  status                 LeadStatus  @default(new) @map("status")
+  preferredDate          DateTime?   @map("preferred_date") @db.Date
+  preferredTimeSlot      String?     @map("preferred_time_slot") @db.VarChar(64)
+  hasValidDriverLicense  Boolean     @default(true) @map("has_valid_driver_license")
+  message                String?     @db.Text
+  internalNotes          String?     @map("internal_notes") @db.Text
+  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  vehicle                Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  assignedTo             User?       @relation("UserAssignedLeads", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([leadType])
+  @@index([email])
+  @@index([vehicleId])
+  @@index([assignedToUserId])
+  @@map("leads")
+}
